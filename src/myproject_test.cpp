@@ -32,12 +32,12 @@ int main(int argc, char **argv) {
     auto device = q.get_device();
 
     // make sure the device supports USM host allocations
-    if (!device.has(sycl::aspect::usm_host_allocations)) {
-        std::cerr << "This design must either target a board that supports USM "
-                     "Host/Shared allocations, or IP Component Authoring. "
-                  << std::endl;
-        std::terminate();
-    }
+    // if (!device.has(sycl::aspect::usm_host_allocations)) {
+    //     std::cerr << "This design must either target a board that supports USM "
+    //                  "Host/Shared allocations, or IP Component Authoring. "
+    //               << std::endl;
+    //     std::terminate();
+    // }
 
     std::cout << "Running on device: " << device.get_info<sycl::info::device::name>().c_str() << std::endl;
 
@@ -111,22 +111,45 @@ int main(int argc, char **argv) {
         fin.close();
         fpr.close();
     } else {
-        const unsigned int num_iterations = 10;
+        const unsigned int num_iterations = 2;
         std::cout << "INFO: Unable to open input/predictions file, using default input with " << num_iterations
                   << " invocations." << std::endl;
 
+        constexpr size_t kinputSz = N_INPUT_1_1*N_INPUT_2_1; 
+        // hls-fpga-machine-learning insert zero
+        // (haoyanwa) change the input and output to device ptr.
+        float *vals_device_ptr = sycl::malloc_device<float>(kinputSz, q);
+        float *output_device_ptr = sycl::malloc_device<float>(N_OUT_4, q);
+
+        // Temp array to buffer data on host side.
+        float vals[kinputSz]; 
+        float outputs[N_OUT_4];
+
+        // Init to all 1s.
+        for (int j = 0 ; j < kinputSz; j++) {
+            vals[j] = 1.0; 
+        }
+
         // hls-fpga-machine-learning insert top-level-function
         for (int i = 0; i < num_iterations; i++) {
-            // hls-fpga-machine-learning insert zero
-            float vals[N_INPUT_1_1*N_INPUT_2_1]; 
-            for (int j = 0 ; j < N_INPUT_1_1*N_INPUT_2_1 ; j++) {
-                vals[j] = 0.0; 
-            }
-            nnet::convert_data<float, Conv1DInputPipe, N_INPUT_1_1*N_INPUT_2_1>(q, vals);
+            // copy the input data to the device memory and wait for the copy to
+            // finish
+            q.memcpy(vals_device_ptr, vals, kinputSz * sizeof(float)).wait();
+            
+            // nnet::convert_data<float, Conv1DInputPipe, N_INPUT_1_1*N_INPUT_2_1>(q, vals);
+            // (haoyanwa) changing to DMA kernel invocation.
+            q.single_task(DMA_convert_data<float, Conv1DInputPipe, N_INPUT_1_1*N_INPUT_2_1>{vals_device_ptr});
             q.single_task(Myproject{});
             // hls-fpga-machine-learning convert output
-            float outputs[N_OUT_4];
-            nnet::convert_data_back<Layer4OutPipe, float, N_OUT_4>(q, outputs);
+            // nnet::convert_data_back<Layer4OutPipe, float, N_OUT_4>(q, outputs);
+            // (haoyanwa) changing to DMA kernel invocation.
+            q.single_task(DMA_convert_data_back<Layer4OutPipe, float, N_OUT_4>{output_device_ptr});
+            q.memcpy(outputs, output_device_ptr, N_OUT_4 * sizeof(float)).wait();
+        
+            // After receiving all the output, write a `true` into `StopPipe` to instruct the kernel to break
+            // out of its main loop.
+            StopPipe::write(q, true);
+            std::cout << "Output DMA Wrote stop to pipe";
             for (auto outval : outputs) {
                 std::cout << outval << " ";
             }

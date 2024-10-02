@@ -20,20 +20,37 @@ void Myproject::operator()() const {
     // NETWORK INSTANTIATION
     // ****************************************
 
+    // hls-fpga-machine-learning read in
 
-    auto conv1d_input = Conv1DInputPipe::read();
+    // (haoyanwa) Test restartable kernel
+    bool keep_going = true;
 
-    // hls-fpga-machine-learning declare task sequences
-
-    // hls-fpga-machine-learning insert layers
-
+    [[intel::fpga_register]] input_t conv1d_input;
     [[intel::fpga_register]] conv1d_result_t layer2_out;
-    nnet::conv_1d_cl<input_t, conv1d_result_t, config2>(conv1d_input, layer2_out, w2, b2);
     [[intel::fpga_register]] layer3_t layer3_out;
-    nnet::relu<conv1d_result_t, layer3_t, relu_config3>(layer2_out, layer3_out);
     [[intel::fpga_register]] result_t layer4_out;
-    nnet::gru<layer3_t, result_t, config4>(layer3_out, layer4_out, w4, wr4, b4, br4);
 
-    // hls-fpga-machine-learning return
-    Layer4OutPipe::write(layer4_out);
+    [[intel::initiation_interval(1)]]
+    while (keep_going) {
+        conv1d_input = Conv1DInputPipe::read();
+        PRINTF("kernel read data\n");
+
+        // hls-fpga-machine-learning declare task sequences
+        nnet::conv_1d_cl<input_t, conv1d_result_t, config2>(conv1d_input, layer2_out, w2, b2);
+        nnet::relu<conv1d_result_t, layer3_t, relu_config3>(layer2_out, layer3_out);
+        nnet::gru<layer3_t, result_t, config4>(layer3_out, layer4_out, w4, wr4, b4, br4);
+
+        PRINTF("went through inference\n");
+        // hls-fpga-machine-learning return
+        Layer4OutPipe::write(layer4_out);
+        PRINTF("send output to pipe\n");
+
+        bool did_read_keep_going = false;
+        bool stop_result = StopPipe::read(did_read_keep_going);
+        if (did_read_keep_going) {
+            PRINTF("received stop!\n");
+            keep_going = !stop_result;
+        }
+    }
+
 }
