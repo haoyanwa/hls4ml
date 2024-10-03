@@ -17,6 +17,12 @@
 
 #define CHECKPOINT 5000
 
+
+#if not defined(IS_BSP)
+using sycl::ext::intel::experimental::property::usm::buffer_location;
+#endif
+
+
 int main(int argc, char **argv) {
 
 #if FPGA_SIMULATOR
@@ -52,114 +58,72 @@ int main(int argc, char **argv) {
     std::string iline;
     std::string pline;
 
-    if (fin.is_open() && fpr.is_open()) {
-        std::vector<std::vector<float>> predictions;
-        unsigned int iteration = 0;
-        for (; std::getline(fin, iline) && std::getline(fpr, pline); iteration++) {
-            if (iteration % CHECKPOINT == 0) {
-                std::cout << "Processing input " << iteration << std::endl;
-            }
+    const unsigned int num_iterations = 2;
+    std::cout << "INFO: Unable to open input/predictions file, using default input with " << num_iterations
+                << " invocations." << std::endl;
 
-            std::vector<float> in;
-            std::vector<float> pr;
-            float current;
+    // (haoyanwa) constants.
+    // kInputSz:
+    // kNumBatch * N_INPUT_1_1 * N_INPUT_2_1
+    //     4           32            3
+    //   Batch      N_Samples    N_Feature
 
-            std::stringstream ssin(iline);
-            while (ssin >> current) {
-                in.push_back(current);
-            }
+    // kOutputSz:
+    // kNumBatch * N_OUT_4
+    //     4         16
+    //   Batch    N_Feature
 
-            std::stringstream sspred(pline);
-            while (sspred >> current) {
-                pr.push_back(current);
-            }
+    constexpr size_t kNumBatch = 4;
+    constexpr size_t kinputSz = kNumBatch * N_INPUT_1_1 * N_INPUT_2_1;
+    constexpr size_t kOutputSz = kNumBatch * N_OUT_4;
 
-            // hls-fpga-machine-learning insert data
-            float vals[N_INPUT_1_1*N_INPUT_2_1]; 
-            for (int j = 0 ; j < N_INPUT_1_1*N_INPUT_2_1 ; j++) {
-                vals[j] = in[j]; 
-            }
-            nnet::convert_data<float, Conv1DInputPipe, N_INPUT_1_1*N_INPUT_2_1>(q, vals);
+    // hls-fpga-machine-learning insert zero
+    // (haoyanwa) change the input and output to device ptr.
+#if defined(IS_DSP)
+    float *vals_device_ptr = sycl::malloc_device<float>(kinputSz, q);
+    float *output_device_ptr = sycl::malloc_device<float>(kOutputSz, q);
+#else
+    float *vals_device_ptr = sycl::malloc_shared<float>(kinputSz, q, sycl::property_list{buffer_location(kInputBufferLocation)});
+    float *output_device_ptr = sycl::malloc_shared<float>(kOutputSz, q, sycl::property_list{buffer_location(kOutputBufferLocation)});
+#endif
 
-            q.single_task(Myproject{});
+    // (haoyanwa) Defines the input buffer and output buffer.
+    float vals[kinputSz]; 
+    float outputs[kOutputSz];
 
-            // hls-fpga-machine-learning convert output
-            float outputs[N_OUT_4];
-            nnet::convert_data_back<Layer4OutPipe, float, N_OUT_4>(q, outputs);
+    // Init to all 1s.
+    for (int j = 0 ; j < kinputSz; j++) {
+        vals[j] = 1.0; 
+    }
 
-            std::copy(pr.cbegin(), pr.cend(), predictions.back().begin());
-
-            for (auto outval : outputs) {
-                fout << outval << " ";
-            }
-            fout << std::endl;
-            if (iteration % CHECKPOINT == 0) {
-                std::cout << "Predictions" << std::endl;
-                // hls-fpga-machine-learning insert predictions
-                for (auto predval : pr) {
-                    std::cout << predval << " ";
-                }
-                std::cout << std::endl;
-                std::cout << "Quantized predictions" << std::endl;
-                // hls-fpga-machine-learning insert quantized
-                for (auto outval : outputs) {
-                    std::cout << outval << " ";
-                }
-                std::cout << std::endl;
-            }
-        }
-        fin.close();
-        fpr.close();
-    } else {
-        const unsigned int num_iterations = 2;
-        std::cout << "INFO: Unable to open input/predictions file, using default input with " << num_iterations
-                  << " invocations." << std::endl;
-
-        constexpr size_t kinputSz = N_INPUT_1_1*N_INPUT_2_1; 
-        // hls-fpga-machine-learning insert zero
-        // (haoyanwa) change the input and output to device ptr.
-        float *vals_device_ptr = sycl::malloc_device<float>(kinputSz, q);
-        float *output_device_ptr = sycl::malloc_device<float>(N_OUT_4, q);
-
-        // Temp array to buffer data on host side.
-        float vals[kinputSz]; 
-        float outputs[N_OUT_4];
-
-        // Init to all 1s.
-        for (int j = 0 ; j < kinputSz; j++) {
-            vals[j] = 1.0; 
-        }
-
-        // hls-fpga-machine-learning insert top-level-function
-        for (int i = 0; i < num_iterations; i++) {
-            // copy the input data to the device memory and wait for the copy to
-            // finish
-            q.memcpy(vals_device_ptr, vals, kinputSz * sizeof(float)).wait();
-            
-            // nnet::convert_data<float, Conv1DInputPipe, N_INPUT_1_1*N_INPUT_2_1>(q, vals);
-            // (haoyanwa) changing to DMA kernel invocation.
-            q.single_task(DMA_convert_data<float, Conv1DInputPipe, N_INPUT_1_1*N_INPUT_2_1>{vals_device_ptr});
-            q.single_task(Myproject{});
-            // hls-fpga-machine-learning convert output
-            // nnet::convert_data_back<Layer4OutPipe, float, N_OUT_4>(q, outputs);
-            // (haoyanwa) changing to DMA kernel invocation.
-            q.single_task(DMA_convert_data_back<Layer4OutPipe, float, N_OUT_4>{output_device_ptr});
-            q.memcpy(outputs, output_device_ptr, N_OUT_4 * sizeof(float)).wait();
+    // hls-fpga-machine-learning insert top-level-function
+    for (int i = 0; i < num_iterations; i++) {
+        // copy the input data to the device memory and wait for the copy to
+        // finish
+        q.memcpy(vals_device_ptr, vals, kinputSz * sizeof(float)).wait();
         
-            // After receiving all the output, write a `true` into `StopPipe` to instruct the kernel to break
-            // out of its main loop.
-            StopPipe::write(q, true);
-            std::cout << "Output DMA Wrote stop to pipe";
-            for (auto outval : outputs) {
-                std::cout << outval << " ";
-            }
-            std::cout << std::endl;
-
-            for (auto outval : outputs) {
-                fout << outval << " ";
-            }
-            fout << std::endl;
+        // nnet::convert_data<float, Conv1DInputPipe, N_INPUT_1_1*N_INPUT_2_1>(q, vals);
+        // (haoyanwa) changing to DMA kernel invocation.
+        q.single_task(DMA_convert_data<float, Conv1DInputPipe, kinputSz>{vals_device_ptr});
+        q.single_task(Myproject{});
+        // hls-fpga-machine-learning convert output
+        // nnet::convert_data_back<Layer4OutPipe, float, N_OUT_4>(q, outputs);
+        // (haoyanwa) changing to DMA kernel invocation.
+        q.single_task(DMA_convert_data_back<Layer4OutPipe, float, kOutputSz>{output_device_ptr}).wait();
+        q.memcpy(outputs, output_device_ptr, kOutputSz * sizeof(float)).wait();
+    
+        // After receiving all the output, write a `true` into `StopPipe` to instruct the kernel to break
+        // out of its main loop.
+        // StopPipe::write(q, true);
+        for (auto outval : outputs) {
+            std::cout << outval << " ";
         }
+        std::cout << std::endl;
+
+        for (auto outval : outputs) {
+            fout << outval << " ";
+        }
+        fout << std::endl;
     }
     q.wait();
 
