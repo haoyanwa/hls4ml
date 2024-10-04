@@ -49,6 +49,7 @@ void conv_1d_im2col_cl(const data_T &data, res_T &res, const typename CONFIG_T::
     using res_col_T = array<typename res_T::value_type, CONFIG_T::n_filt>;
 
 ColLoop:
+    // TODO: verify if this unroll factor is the issue and change it.
     #pragma unroll pf
     [[intel::initiation_interval(CONFIG_T::reuse_factor)]] for (int i = 0; i < CONFIG_T::out_width; i++) {
         // Loop variables should always be declared in the deepest scope available

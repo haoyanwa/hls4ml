@@ -125,6 +125,7 @@ struct DMA_convert_data {
 
         for (size_t i = 0; i < SIZE / dstTypeSize; i++) {
             typename nnet::ExtractPipeType<dest_pipe>::value_type ctype;
+            #pragma unroll
             for (size_t j = 0; j < dstTypeSize; j++) {
                 ctype.data[j] = src_ptr[i * dstTypeSize + j];
             }
@@ -167,6 +168,7 @@ struct DMA_convert_data_back {
         constexpr auto srcTypeSize = std::tuple_size<typename nnet::ExtractPipeType<src_pipe>::value_type>{};
         for (size_t i = 0; i < SIZE / srcTypeSize; i++) {
             auto ctype = src_pipe::read();
+            #pragma unroll
             for (size_t j = 0; j < srcTypeSize; j++) {
                 dst_ptr[i * srcTypeSize + j] = ctype[j].to_double();
             }
