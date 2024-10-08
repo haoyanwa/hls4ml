@@ -61,28 +61,19 @@ class MyprojectID;
 struct Myproject {
 
     // kernel property method to config invocation interface
-    auto get(sycl::ext::oneapi::experimental::properties_tag) {
-        return sycl::ext::oneapi::experimental::properties{sycl::ext::intel::experimental::streaming_interface<>,
-                                                           sycl::ext::intel::experimental::pipelined<>};
-    }
+    // auto get(sycl::ext::oneapi::experimental::properties_tag) {
+    //     return sycl::ext::oneapi::experimental::properties{sycl::ext::intel::experimental::streaming_interface<>,
+    //                                                        sycl::ext::intel::experimental::pipelined<>};
+    // }
 
     SYCL_EXTERNAL void operator()() const;
 };
 
-class StopPipeID;
-// StopPipe is mapped to the CSR. This way a kernel can be controlled by a
-// memory-mapped host while it executes.
-using CsrPipeProperties = decltype(sycl::ext::oneapi::experimental::properties(
-    sycl::ext::intel::experimental::protocol<
-        // Write-only, so no no need for protocol_name::avalon_mm_uses_ready
-        sycl::ext::intel::experimental::protocol_name::avalon_mm_uses_ready>));
-using StopPipe = sycl::ext::intel::experimental::pipe<StopPipeID, bool, 0, CsrPipeProperties>;
-
 class IDInputDMA;
 class IDOutputDMA;
 
-constexpr unsigned kInputBufferLocation = 1;
-constexpr unsigned kOutputBufferLocation = 2;
+constexpr unsigned kInputBufferLocation = 0;
+constexpr unsigned kOutputBufferLocation = 1;
 
 template <class srcType, class dest_pipe, size_t SIZE> 
 struct DMA_convert_data {

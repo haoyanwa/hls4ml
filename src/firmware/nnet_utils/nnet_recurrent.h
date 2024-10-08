@@ -175,6 +175,7 @@ void gru(const data_T &data, res_T &res, const typename CONFIG_T::weight_t &weig
     }
 
     // Loop depedency - cannot pipeline
+    // TODO: double-checking with Jovan next time we sync up
     [[intel::disable_loop_pipelining]] for (int t = 0; t < CONFIG_T::n_timesteps; t++) {
         // Get data at current time step
         #pragma unroll

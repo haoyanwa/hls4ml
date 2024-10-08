@@ -133,6 +133,8 @@ ReuseLoop:
                 in_index = ir;
         }
     AccumLoop:
+        // TODO: speed up the compile time: use fpga_tools::UnrollLoop<>, it unrolls before compile.
+        // good for fully-unrolled loops
         #pragma unroll
         for (int im = 0, out_index = 0, acc_step = 0; im < CONFIG_T::block_factor; im++) {
             acc[out_index] += mult[im];

@@ -47,21 +47,6 @@ int main(int argc, char **argv) {
 
     std::cout << "Running on device: " << device.get_info<sycl::info::device::name>().c_str() << std::endl;
 
-    // load input data from text file
-    std::ifstream fin("tb_data/tb_input_features.dat");
-    // load predictions from text file
-    std::ifstream fpr("tb_data/tb_output_predictions.dat");
-
-    std::string RESULTS_LOG = "tb_data/results.log";
-    std::ofstream fout(RESULTS_LOG);
-
-    std::string iline;
-    std::string pline;
-
-    const unsigned int num_iterations = 2;
-    std::cout << "INFO: Unable to open input/predictions file, using default input with " << num_iterations
-                << " invocations." << std::endl;
-
     // (haoyanwa) constants.
     // kInputSz:
     // kNumBatch * N_INPUT_1_1 * N_INPUT_2_1
@@ -76,12 +61,21 @@ int main(int argc, char **argv) {
     constexpr size_t kNumBatch = 4;
     constexpr size_t kinputSz = kNumBatch * N_INPUT_1_1 * N_INPUT_2_1;
     constexpr size_t kOutputSz = kNumBatch * N_OUT_4;
+    std::cout << "INFO: Using default input with " << kNumBatch << " batch" << std::endl;
 
     // hls-fpga-machine-learning insert zero
     // (haoyanwa) change the input and output to device ptr.
-#if defined(IS_DSP)
+#if defined(IS_BSP)
     float *vals_device_ptr = sycl::malloc_device<float>(kinputSz, q);
+    if (vals_device_ptr == nullptr) {
+        std::cerr << "ERROR: device allocation failed for input\n";
+        return 1;
+    }
     float *output_device_ptr = sycl::malloc_device<float>(kOutputSz, q);
+    if (output_device_ptr == nullptr) {
+        std::cerr << "ERROR: device allocation failed for output\n";
+        return 1;
+    }    
 #else
     float *vals_device_ptr = sycl::malloc_shared<float>(kinputSz, q, sycl::property_list{buffer_location(kInputBufferLocation)});
     float *output_device_ptr = sycl::malloc_shared<float>(kOutputSz, q, sycl::property_list{buffer_location(kOutputBufferLocation)});
@@ -96,39 +90,28 @@ int main(int argc, char **argv) {
         vals[j] = 1.0; 
     }
 
-    // hls-fpga-machine-learning insert top-level-function
-    for (int i = 0; i < num_iterations; i++) {
-        // copy the input data to the device memory and wait for the copy to
-        // finish
-        q.memcpy(vals_device_ptr, vals, kinputSz * sizeof(float)).wait();
-        
-        // nnet::convert_data<float, Conv1DInputPipe, N_INPUT_1_1*N_INPUT_2_1>(q, vals);
-        // (haoyanwa) changing to DMA kernel invocation.
-        q.single_task(DMA_convert_data<float, Conv1DInputPipe, kinputSz>{vals_device_ptr});
-        q.single_task(Myproject{});
-        // hls-fpga-machine-learning convert output
-        // nnet::convert_data_back<Layer4OutPipe, float, N_OUT_4>(q, outputs);
-        // (haoyanwa) changing to DMA kernel invocation.
-        q.single_task(DMA_convert_data_back<Layer4OutPipe, float, kOutputSz>{output_device_ptr}).wait();
-        q.memcpy(outputs, output_device_ptr, kOutputSz * sizeof(float)).wait();
+    // copy the input data to the device memory and wait for the copy to finish
+    q.memcpy(vals_device_ptr, vals, kinputSz * sizeof(float)).wait();
     
-        // After receiving all the output, write a `true` into `StopPipe` to instruct the kernel to break
-        // out of its main loop.
-        // StopPipe::write(q, true);
-        for (auto outval : outputs) {
-            std::cout << outval << " ";
-        }
-        std::cout << std::endl;
+    // nnet::convert_data<float, Conv1DInputPipe, N_INPUT_1_1*N_INPUT_2_1>(q, vals);
+    // (haoyanwa) changing to DMA kernel invocation.
+    q.single_task(DMA_convert_data<float, Conv1DInputPipe, kinputSz>{vals_device_ptr});
+    q.single_task(Myproject{});
+    // hls-fpga-machine-learning convert output
+    // nnet::convert_data_back<Layer4OutPipe, float, N_OUT_4>(q, outputs);
+    // (haoyanwa) changing to DMA kernel invocation.
+    q.single_task(DMA_convert_data_back<Layer4OutPipe, float, kOutputSz>{output_device_ptr}).wait();
+    q.memcpy(outputs, output_device_ptr, kOutputSz * sizeof(float)).wait();
 
-        for (auto outval : outputs) {
-            fout << outval << " ";
-        }
-        fout << std::endl;
+    // After receiving all the output, write a `true` into `StopPipe` to instruct the kernel to break
+    // out of its main loop.
+    // StopPipe::write(q, true);
+    for (auto outval : outputs) {
+        std::cout << outval << " ";
     }
-    q.wait();
+    std::cout << std::endl;
 
-    fout.close();
-    std::cout << "INFO: Saved inference results to file: " << RESULTS_LOG << std::endl;
+    std::cout << "Done." << std::endl;
 
     return 0;
 }

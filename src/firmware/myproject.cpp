@@ -34,6 +34,7 @@ void Myproject::operator()() const {
     while (keep_going) {
         conv1d_input_beat = Conv1DInputPipe::read();
 
+        [[intel::fpga_register]]
         auto conv1d_input = conv1d_input_beat.data;
 
         // hls-fpga-machine-learning declare task sequences

@@ -53,7 +53,7 @@ struct config2 : nnet::conv1d_config {
     static const unsigned dilation = 1;
 
     static const unsigned reuse_factor = 1;
-    static const unsigned parallelization_factor = 1;
+    static const unsigned parallelization_factor = 32;
     static const bool store_weights_in_bram = false;
 
     static const nnet::conv1d_implementation implementation = nnet::conv1d_implementation::im2col;
