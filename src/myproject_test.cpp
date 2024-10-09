@@ -66,14 +66,14 @@ int main(int argc, char **argv) {
     // hls-fpga-machine-learning insert zero
     // (haoyanwa) change the input and output to device ptr.
 #if defined(IS_BSP)
-    float *vals_device_ptr = sycl::malloc_device<float>(kinputSz, q);
+    float *vals_device_ptr = sycl::malloc_host<float>(kinputSz, q);
     if (vals_device_ptr == nullptr) {
-        std::cerr << "ERROR: device allocation failed for input\n";
+        std::cerr << "ERROR: host allocation failed for input\n";
         return 1;
     }
-    float *output_device_ptr = sycl::malloc_device<float>(kOutputSz, q);
+    float *output_device_ptr = sycl::malloc_host<float>(kOutputSz, q);
     if (output_device_ptr == nullptr) {
-        std::cerr << "ERROR: device allocation failed for output\n";
+        std::cerr << "ERROR: host allocation failed for output\n";
         return 1;
     }    
 #else
@@ -81,18 +81,11 @@ int main(int argc, char **argv) {
     float *output_device_ptr = sycl::malloc_shared<float>(kOutputSz, q, sycl::property_list{buffer_location(kOutputBufferLocation)});
 #endif
 
-    // (haoyanwa) Defines the input buffer and output buffer.
-    float vals[kinputSz]; 
-    float outputs[kOutputSz];
-
     // Init to all 1s.
     for (int j = 0 ; j < kinputSz; j++) {
-        vals[j] = 1.0; 
+        vals_device_ptr[j] = 1.0; 
     }
 
-    // copy the input data to the device memory and wait for the copy to finish
-    q.memcpy(vals_device_ptr, vals, kinputSz * sizeof(float)).wait();
-    
     // nnet::convert_data<float, Conv1DInputPipe, N_INPUT_1_1*N_INPUT_2_1>(q, vals);
     // (haoyanwa) changing to DMA kernel invocation.
     q.single_task(DMA_convert_data<float, Conv1DInputPipe, kinputSz>{vals_device_ptr});
@@ -101,13 +94,9 @@ int main(int argc, char **argv) {
     // nnet::convert_data_back<Layer4OutPipe, float, N_OUT_4>(q, outputs);
     // (haoyanwa) changing to DMA kernel invocation.
     q.single_task(DMA_convert_data_back<Layer4OutPipe, float, kOutputSz>{output_device_ptr}).wait();
-    q.memcpy(outputs, output_device_ptr, kOutputSz * sizeof(float)).wait();
 
-    // After receiving all the output, write a `true` into `StopPipe` to instruct the kernel to break
-    // out of its main loop.
-    // StopPipe::write(q, true);
-    for (auto outval : outputs) {
-        std::cout << outval << " ";
+    for (int j = 0; j < kOutputSz; j++) {
+        std::cout << output_device_ptr[j] << " ";
     }
     std::cout << std::endl;
 

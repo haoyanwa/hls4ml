@@ -51,10 +51,10 @@ struct ExtractDataType<sycl::ext::intel::experimental::StreamingBeat<DataT, Enab
 
 // hls-fpga-machine-learning insert inputs
 class Conv1DInputPipeID;
-using Conv1DInputPipe = sycl::ext::intel::experimental::pipe<Conv1DInputPipeID, InputBeatT, 0, InPipePropertiesT>;
+using Conv1DInputPipe = sycl::ext::intel::experimental::pipe<Conv1DInputPipeID, InputBeatT, 32, InPipePropertiesT>;
 // hls-fpga-machine-learning insert outputs
 class Layer4OutPipeID;
-using Layer4OutPipe = sycl::ext::intel::experimental::pipe<Layer4OutPipeID, result_t, 0, PipeProps>;
+using Layer4OutPipe = sycl::ext::intel::experimental::pipe<Layer4OutPipeID, result_t, 32, PipeProps>;
 
 class MyprojectID;
 
@@ -100,7 +100,7 @@ struct DMA_convert_data {
         // the device.
         // Knowing this, the compiler won't generate hardware to potentially get
         // data from the host.
-        sycl::ext::intel::device_ptr<srcType> src_ptr(src);
+        sycl::ext::intel::host_ptr<srcType> src_ptr(src);
 #else
         // Device pointers are not supported when targeting an FPGA family/part
         srcType *src_ptr(src);
@@ -113,6 +113,8 @@ struct DMA_convert_data {
         // Then, extract the DataT from StreamingBeat
         using DstDataType = typename ::ExtractDataType<PipeDataType>::value_type;
         constexpr auto dstTypeSize = std::tuple_size<DstDataType>{};
+        
+        // TODO: buffer memory read.
 
         for (size_t i = 0; i < SIZE / dstTypeSize; i++) {
             typename nnet::ExtractPipeType<dest_pipe>::value_type ctype;
@@ -151,7 +153,7 @@ struct DMA_convert_data_back {
         // the device.
         // Knowing this, the compiler won't generate hardware to potentially get
         // data from the host.
-        sycl::ext::intel::device_ptr<dstType> dst_ptr(dst);
+        sycl::ext::intel::host_ptr<dstType> dst_ptr(dst);
 #else
         // Device pointers are not supported when targeting an FPGA family/part
         dstType *dst_ptr(dst);
