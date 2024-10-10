@@ -34,8 +34,8 @@ int main(int argc, char **argv) {
 
 
     constexpr size_t kNumBatch = 300;
-    constexpr size_t kinputSz = kNumBatch * N_INPUT_1_1;
-    constexpr size_t kOutputSz = kNumBatch * N_LAYER_11;
+    constexpr size_t kinputSz = kNumBatch * N_INPUT_1_1 * N_INPUT_2_1 * N_INPUT_3_1;
+    constexpr size_t kOutputSz = kNumBatch * N_LAYER_9;
     std::cout << "INFO: Using default input with " << kNumBatch << " batch" << std::endl;
 
     try
@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
 
         for (size_t i = 0; i < kOutputSz / srcTypeSize; i++)
         {
-            octype = Layer10OutPipeID::read(q);
+            octype = Layer10OutPipe::read(q);
             for (size_t j = 0; j < srcTypeSize; j++)
             {
                 buffer[i * srcTypeSize + j] = octype[j].to_double();

@@ -1,0 +1,18 @@
+Backend: oneAPI
+ClockPeriod: 5
+HLSConfig:
+  Model:
+    BramFactor: 1000000000
+    Precision: fixed<16,6>
+    ReuseFactor: 1
+    Strategy: Latency
+    TraceOutput: false
+IOType: io_stream
+InputData: null
+KerasModel: !keras_model '/home/haoyanwa/HLS4ML/hls4ml/test/pytest/hls4mlprj_keras_api_dense_oneAPI_io_stream/keras_model.keras'
+OutputDir: /home/haoyanwa/HLS4ML/hls4ml/test/pytest/hls4mlprj_keras_api_dense_oneAPI_io_stream
+OutputPredictions: null
+Part: Arria10
+ProjectName: myproject
+Stamp: db9fe47a
+Version: 1.0.0
