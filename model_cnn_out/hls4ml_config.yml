@@ -1,0 +1,66 @@
+Backend: oneAPI
+ClockPeriod: 5
+HLSConfig:
+  LayerName:
+    conv2d_12:
+      Precision:
+        bias: auto
+        result: auto
+        weight: auto
+      Trace: false
+    conv2d_12_input:
+      Precision:
+        result: auto
+      Trace: false
+    conv2d_12_relu:
+      Precision:
+        result: auto
+      Trace: false
+    conv2d_13:
+      Precision:
+        bias: auto
+        result: auto
+        weight: auto
+      Trace: false
+    conv2d_13_relu:
+      Precision:
+        result: auto
+      Trace: false
+    dense_6:
+      Precision:
+        bias: auto
+        result: auto
+        weight: auto
+      Trace: false
+    dense_6_softmax:
+      Precision:
+        result: auto
+      Trace: false
+    flatten_5:
+      Precision:
+        result: auto
+      Trace: false
+    max_pooling2d_8:
+      Precision:
+        result: auto
+      Trace: false
+    max_pooling2d_9:
+      Precision:
+        result: auto
+      Trace: false
+  Model:
+    BramFactor: 1000000000
+    Precision:
+      default: ac_fixed<16, 6>
+    ReuseFactor: 1
+    Strategy: Latency
+    TraceOutput: false
+IOType: io_parallel
+InputData: null
+KerasModel: !keras_model 'model_cnn_out/keras_model.keras'
+OutputDir: model_cnn_out
+OutputPredictions: null
+Part: Agilex7
+ProjectName: myproject
+Stamp: d858c69a
+Version: 1.0.0
