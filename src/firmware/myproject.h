@@ -61,10 +61,10 @@ class MyprojectID;
 struct Myproject {
 
     // kernel property method to config invocation interface
-    // auto get(sycl::ext::oneapi::experimental::properties_tag) {
-    //     return sycl::ext::oneapi::experimental::properties{sycl::ext::intel::experimental::streaming_interface<>,
-    //                                                        sycl::ext::intel::experimental::pipelined<>};
-    // }
+    auto get(sycl::ext::oneapi::experimental::properties_tag) {
+        return sycl::ext::oneapi::experimental::properties{sycl::ext::intel::experimental::streaming_interface<>,
+                                                           sycl::ext::intel::experimental::pipelined<>};
+    }
 
     SYCL_EXTERNAL void operator()() const;
 };
@@ -115,9 +115,10 @@ struct DMA_convert_data {
         constexpr auto dstTypeSize = std::tuple_size<DstDataType>{};
         
         // TODO: buffer memory read.
-
+        [[intel::fpga_register]]
+        typename nnet::ExtractPipeType<dest_pipe>::value_type ctype;
+        
         for (size_t i = 0; i < SIZE / dstTypeSize; i++) {
-            typename nnet::ExtractPipeType<dest_pipe>::value_type ctype;
             #pragma unroll
             for (size_t j = 0; j < dstTypeSize; j++) {
                 ctype.data[j] = src_ptr[i * dstTypeSize + j];
@@ -159,8 +160,12 @@ struct DMA_convert_data_back {
         dstType *dst_ptr(dst);
 #endif
         constexpr auto srcTypeSize = std::tuple_size<typename nnet::ExtractPipeType<src_pipe>::value_type>{};
+
+        [[intel::fpga_register]] 
+        typename nnet::ExtractPipeType<src_pipe>::value_type ctype;
+
         for (size_t i = 0; i < SIZE / srcTypeSize; i++) {
-            auto ctype = src_pipe::read();
+            ctype = src_pipe::read();
             #pragma unroll
             for (size_t j = 0; j < srcTypeSize; j++) {
                 dst_ptr[i * srcTypeSize + j] = ctype[j].to_double();
