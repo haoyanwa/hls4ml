@@ -2,8 +2,34 @@
 #define MYPROJECT_H_
 
 #include "defines.h"
+#include <sycl/ext/intel/prototype/pipes_ext.hpp>
 
 // This file defines the interface to the kernel
+
+using PipeProps = decltype(sycl::ext::oneapi::experimental::properties(sycl::ext::intel::experimental::ready_latency<0>));
+using InPipePropertiesT = decltype(sycl::ext::oneapi::experimental::properties(
+    sycl::ext::intel::experimental::ready_latency<0>,
+    sycl::ext::intel::experimental::bits_per_symbol<16>,
+    sycl::ext::intel::experimental::uses_valid<true>,
+    sycl::ext::intel::experimental::first_symbol_in_high_order_bits<true>,
+    sycl::ext::intel::experimental::protocol_avalon_streaming_uses_ready
+));
+
+
+using InputBeatT = sycl::ext::intel::experimental::StreamingBeat<
+    input_t,     // type carried over this Avalon streaming interface's data signal.
+    true,         // enable startofpacket and endofpacket signals
+    true>;       // to enable the empty signal
+
+
+// Helper to extract DataT from StreamingBeat
+template <typename T> struct ExtractDataType { typedef T value_type; };
+
+template <typename DataT, bool EnableSOP, bool EnableEmpty>
+struct ExtractDataType<sycl::ext::intel::experimental::StreamingBeat<DataT, EnableSOP, EnableEmpty>> {
+    typedef DataT value_type;
+};
+
 
 // currently this is fixed
 using PipeProps = decltype(sycl::ext::oneapi::experimental::properties(sycl::ext::intel::experimental::ready_latency<0>));
@@ -12,10 +38,10 @@ using PipeProps = decltype(sycl::ext::oneapi::experimental::properties(sycl::ext
 
 // hls-fpga-machine-learning insert inputs
 class Conv2D12InputPipeID;
-using Conv2D12InputPipe = sycl::ext::intel::experimental::pipe<Conv2D12InputPipeID, input_t, 0, PipeProps>;
+using Conv2D12InputPipe = sycl::ext::intel::experimental::pipe<Conv2D12InputPipeID, InputBeatT InPipePropertiesT>;
 // hls-fpga-machine-learning insert outputs
 class Layer10OutPipeID;
-using Layer10OutPipe = sycl::ext::intel::experimental::pipe<Layer10OutPipeID, result_t, 0, PipeProps>;
+using Layer10OutPipe = sycl::ext::intel::experimental::pipe<Layer10OutPipeID, result_t, 32, PipeProps>;
 
 class MyprojectID;
 

@@ -43,7 +43,7 @@ endif()
 
 # Use cmake -DUSER_FPGA_FLAGS=<flags> to set extra flags for FPGA backend
 # compilation.
-set(USER_FPGA_FLAGS -Wno-unused-label ${USER_FPGA_FLAGS})
+set(USER_FPGA_FLAGS -Wno-unused-label;${USER_FPGA_FLAGS};-Xsoptimize=latency)
 
 # Use cmake -DUSER_FLAGS=<flags> to set extra flags for general compilation.
 set(USER_FLAGS -Wno-unused-label -fconstexpr-steps=134217728 ${USER_FLAGS})
@@ -113,7 +113,7 @@ set(LIBRARY_LINK_FLAGS -L$ENV{FPGA_VARS_DIR}/host/linux64/lib)
 set(REPORT_COMPILE_FLAGS -DFPGA_HARDWARE)
 set(REPORT_LINK_FLAGS -Xshardware -Xstarget=${FPGA_DEVICE} ${USER_FPGA_FLAGS} -fsycl-link=early)
 set(SIMULATOR_COMPILE_FLAGS -Xssimulation -DFPGA_SIMULATOR)
-set(SIMULATOR_LINK_FLAGS -Xssimulation -Xsghdl -Xstarget=${FPGA_DEVICE} ${USER_FPGA_FLAGS} -reuse-exe=${CMAKE_BINARY_DIR}/${SIMULATOR_OUTPUT_NAME})
+set(SIMULATOR_LINK_FLAGS -Xssimulation -Xsghdl=0 -Xstarget=${FPGA_DEVICE} ${USER_FPGA_FLAGS} -reuse-exe=${CMAKE_BINARY_DIR}/${SIMULATOR_OUTPUT_NAME})
 set(FPGA_COMPILE_FLAGS -DFPGA_HARDWARE)
 set(FPGA_LINK_FLAGS -Xshardware -Xstarget=${FPGA_DEVICE} ${USER_FPGA_FLAGS} -reuse-exe=${CMAKE_BINARY_DIR}/${FPGA_OUTPUT_NAME})
 # get rid of this once host pipes work properly

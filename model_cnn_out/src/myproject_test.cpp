@@ -30,118 +30,69 @@ int main(int argc, char **argv) {
     sycl::queue q(selector, fpga_tools::exception_handler, sycl::property::queue::enable_profiling{});
 
     auto device = q.get_device();
-
-    // make sure the device supports USM host allocations
-    if (!device.has(sycl::aspect::usm_host_allocations)) {
-        std::cerr << "This design must either target a board that supports USM "
-                     "Host/Shared allocations, or IP Component Authoring. "
-                  << std::endl;
-        std::terminate();
-    }
-
     std::cout << "Running on device: " << device.get_info<sycl::info::device::name>().c_str() << std::endl;
 
-    // load input data from text file
-    std::ifstream fin("tb_data/tb_input_features.dat");
-    // load predictions from text file
-    std::ifstream fpr("tb_data/tb_output_predictions.dat");
 
-    std::string RESULTS_LOG = "tb_data/results.log";
-    std::ofstream fout(RESULTS_LOG);
+    constexpr size_t kNumBatch = 300;
+    constexpr size_t kinputSz = kNumBatch * N_INPUT_1_1;
+    constexpr size_t kOutputSz = kNumBatch * N_LAYER_11;
+    std::cout << "INFO: Using default input with " << kNumBatch << " batch" << std::endl;
 
-    std::string iline;
-    std::string pline;
+    try
+    {
+        InputBeatT ctype;
 
-    if (fin.is_open() && fpr.is_open()) {
-        std::vector<std::vector<float>> predictions;
-        unsigned int iteration = 0;
-        for (; std::getline(fin, iline) && std::getline(fpr, pline); iteration++) {
-            if (iteration % CHECKPOINT == 0) {
-                std::cout << "Processing input " << iteration << std::endl;
+        constexpr size_t dstTypeSize = std::tuple_size<input_t>{};
+
+        q.single_task(Myproject{});
+        for (size_t i = 0; i < kinputSz / dstTypeSize; i++)
+        {
+            for (size_t j = 0; j < dstTypeSize; j++)
+            {
+                ctype.data[j] = 1.0;
             }
+            ctype.sop = (i == 0);
+            ctype.eop = (i == (kinputSz / dstTypeSize - 1));
+            Conv2D12InputPipe::write(q, ctype);
+        }
 
-            std::vector<float> in;
-            std::vector<float> pr;
-            float current;
+        constexpr size_t srcTypeSize = std::tuple_size<result_t>{};
+        double buffer[kOutputSz];
+        result_t octype;
 
-            std::stringstream ssin(iline);
-            while (ssin >> current) {
-                in.push_back(current);
-            }
-
-            std::stringstream sspred(pline);
-            while (sspred >> current) {
-                pr.push_back(current);
-            }
-
-            // hls-fpga-machine-learning insert data
-            float vals[N_INPUT_1_1*N_INPUT_2_1*N_INPUT_3_1]; 
-            for (int j = 0 ; j < N_INPUT_1_1*N_INPUT_2_1*N_INPUT_3_1 ; j++) {
-                vals[j] = in[j]; 
-            }
-            nnet::convert_data<float, Conv2D12InputPipe, N_INPUT_1_1*N_INPUT_2_1*N_INPUT_3_1>(q, vals);
-
-            q.single_task(Myproject{});
-
-            // hls-fpga-machine-learning convert output
-            float outputs[N_LAYER_9];
-            nnet::convert_data_back<Layer10OutPipe, float, N_LAYER_9>(q, outputs);
-
-            std::copy(pr.cbegin(), pr.cend(), predictions.back().begin());
-
-            for (auto outval : outputs) {
-                fout << outval << " ";
-            }
-            fout << std::endl;
-            if (iteration % CHECKPOINT == 0) {
-                std::cout << "Predictions" << std::endl;
-                // hls-fpga-machine-learning insert predictions
-                for (auto predval : pr) {
-                    std::cout << predval << " ";
-                }
-                std::cout << std::endl;
-                std::cout << "Quantized predictions" << std::endl;
-                // hls-fpga-machine-learning insert quantized
-                for (auto outval : outputs) {
-                    std::cout << outval << " ";
-                }
-                std::cout << std::endl;
+        for (size_t i = 0; i < kOutputSz / srcTypeSize; i++)
+        {
+            octype = Layer10OutPipeID::read(q);
+            for (size_t j = 0; j < srcTypeSize; j++)
+            {
+                buffer[i * srcTypeSize + j] = octype[j].to_double();
             }
         }
-        fin.close();
-        fpr.close();
-    } else {
-        const unsigned int num_iterations = 10;
-        std::cout << "INFO: Unable to open input/predictions file, using default input with " << num_iterations
-                  << " invocations." << std::endl;
 
-        // hls-fpga-machine-learning insert top-level-function
-        for (int i = 0; i < num_iterations; i++) {
-            // hls-fpga-machine-learning insert zero
-            float vals[N_INPUT_1_1*N_INPUT_2_1*N_INPUT_3_1]; 
-            for (int j = 0 ; j < N_INPUT_1_1*N_INPUT_2_1*N_INPUT_3_1 ; j++) {
-                vals[j] = 0.0; 
-            }
-            nnet::convert_data<float, Conv2D12InputPipe, N_INPUT_1_1*N_INPUT_2_1*N_INPUT_3_1>(q, vals);
-            q.single_task(Myproject{});
-            // hls-fpga-machine-learning convert output
-            float outputs[N_LAYER_9];
-            nnet::convert_data_back<Layer10OutPipe, float, N_LAYER_9>(q, outputs);
-            for (auto outval : outputs) {
-                std::cout << outval << " ";
-            }
-            std::cout << std::endl;
-
-            for (auto outval : outputs) {
-                fout << outval << " ";
-            }
-            fout << std::endl;
+        for (int j = 0; j < kOutputSz; j++)
+        {
+            std::cout << buffer[j] << " ";
         }
+
+        q.wait();
     }
-    q.wait();
+    catch (sycl::exception const &e)
+    {
+        // Catches exceptions in the host code.
+        std::cerr << "Caught a SYCL host exception:\n"
+                  << e.what() << "\n";
 
-    fout.close();
-    std::cout << "INFO: Saved inference results to file: " << RESULTS_LOG << std::endl;
+        // Most likely the runtime couldn't find FPGA hardware!
+        if (e.code().value() == CL_DEVICE_NOT_FOUND)
+        {
+            std::cerr << "If you are targeting an FPGA, please ensure that your "
+                         "system has a correctly configured FPGA board.\n";
+            std::cerr << "Run sys_check in the oneAPI root directory to verify.\n";
+            std::cerr << "If you are targeting the FPGA emulator, compile with "
+                         "-DFPGA_EMULATOR.\n";
+        }
+        std::terminate();
+    }
 
     return 0;
 }
