@@ -1,0 +1,52 @@
+Backend: oneAPI
+ClockPeriod: 5
+HLSConfig:
+  LayerName:
+    fc1:
+      Precision:
+        bias: auto
+        result: auto
+        weight: auto
+      Trace: false
+    fc1_input:
+      Precision:
+        result: auto
+      Trace: false
+    fc1_linear:
+      Precision:
+        result: auto
+      Trace: false
+    fc2:
+      Precision:
+        bias: auto
+        result: auto
+        weight: auto
+      Trace: false
+    fc2_linear:
+      Precision:
+        result: auto
+      Trace: false
+    relu1:
+      Precision:
+        result: auto
+      Trace: false
+    relu2:
+      Precision:
+        result: auto
+      Trace: false
+  Model:
+    BramFactor: 1000000000
+    Precision:
+      default: ac_fixed<16, 6>
+    ReuseFactor: 1
+    Strategy: Latency
+    TraceOutput: false
+IOType: io_stream
+InputData: null
+KerasModel: !keras_model 'small_mlp_streaming_out/keras_model.keras'
+OutputDir: small_mlp_streaming_out
+OutputPredictions: null
+Part: Agilex7
+ProjectName: myproject
+Stamp: 3ecd0f10
+Version: 1.0.0
